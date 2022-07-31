@@ -12,7 +12,9 @@ object Pcap:
   case class SockAddr(s: String)
 //   case class SockAddr(addr, netmask, broadaddr, dstaddr)
 
-  private def makeErrorBuffer(using Zone) = stackalloc[Byte](256)
+  private def zone[A](f: Zone ?=> A): A = Zone(z => f(using z))
+
+  private def makeErrorBuffer(using Zone) = alloc[Byte](256)
   private def fromNullableString(cstr: CString): String =
     if cstr eq null then "" else fromCString(cstr)
 
@@ -43,8 +45,8 @@ object Pcap:
     bldr.result()
 
   def interfaces: List[Interface] =
-    Zone { implicit z =>
-      val p = stackalloc[Ptr[pcap_if]](1)
+    zone {
+      val p = alloc[Ptr[pcap_if]]()
       val errbuf = makeErrorBuffer
       val rc = pcap_findalldevs(p, errbuf)
       if rc == 0 then fromPcapIf(!p)

@@ -55,8 +55,5 @@ object libpcap:
     import types.*
     def pcap_findalldevs(interfaces: Ptr[Ptr[pcap_if]], errbuf: CString): CInt = extern
 
-    def inet_aton(s: CString, ptr: Ptr[UInt]): CInt = extern
-    def inet_ntoa(addr: UInt): CString = extern
-    def inet_ntop(family: CInt, ptr: Ptr[Byte], str: CString, len: UInt): CString = extern
-    // TODO: Couldn't get CSize working below
+    // TODO: getnameinfo not working on OS X, might need sn 0.5 with socket fixes
     def getnameinfo(sa: Ptr[sockaddr], salen: CSize, host: CString, hostlen: CInt, serv: CString, servlen: CInt, flags: CInt): CInt = extern
