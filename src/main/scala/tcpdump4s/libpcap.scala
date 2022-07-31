@@ -49,6 +49,7 @@ object libpcap:
 
   val NI_NUMERICHOST: CInt = 2
 
+  @link("pcap")
   @extern
   object functions:
     import types.*
