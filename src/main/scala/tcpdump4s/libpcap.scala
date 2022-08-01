@@ -36,6 +36,9 @@ object libpcap:
       extension (struct: pcap_addr)
         def next: Ptr[pcap_addr] = struct._1.asInstanceOf[Ptr[pcap_addr]]
         def addr: Ptr[sockaddr] = struct._2
+        def netmask: Ptr[sockaddr] = struct._3
+        def broadaddr: Ptr[sockaddr] = struct._4
+        def dstaddr: Ptr[sockaddr] = struct._5
 
     opaque type pcap_if = CStruct5[Ptr[Byte], CString, CString, Ptr[Byte], CUnsignedInt]
     object pcap_if:

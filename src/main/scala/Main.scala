@@ -5,7 +5,7 @@ object Main {
     Pcap.interfaces.foreach { interface =>
       println(interface.name)
       interface.addresses.foreach { addr =>
-        println(s"  ${addr.address}")
+        println(s"  ${addr.cidr}")
       }
     }
 }

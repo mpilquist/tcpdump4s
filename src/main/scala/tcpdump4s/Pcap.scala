@@ -7,12 +7,15 @@ import scala.scalanative.unsafe.*
 import scala.scalanative.unsigned.*
 import scala.scalanative.posix.sys.socket.{AF_INET, AF_INET6}
 
-import com.comcast.ip4s.IpAddress
+import cats.syntax.all.*
+import com.comcast.ip4s.{Cidr, IpAddress}
 
 object Pcap:
   case class Interface(name: String, description: String, addresses: List[SockAddr])
-  case class SockAddr(address: IpAddress)
-//   case class SockAddr(addr, netmask, broadaddr, dstaddr)
+  case class SockAddr(address: IpAddress, netmask: IpAddress, broadcastAddress: Option[IpAddress], destinationAddress: Option[IpAddress]):
+    private def prefixCount: Int = netmask.toBytes.foldLeft(0)((acc, b) => acc + java.lang.Integer.bitCount(0xff & b))
+    // TODO ip4s should have a way to create a cidr from an address and netmask
+    def cidr: Cidr[IpAddress] = Cidr(address, prefixCount)
 
   private def zone[A](f: Zone ?=> A): A = Zone(z => f(using z))
 
@@ -27,7 +30,8 @@ object Pcap:
     if rc == 0 then Some(fromNullableString(host)) else None
 
   private def getIpAddress(ptrSa: Ptr[sockaddr]): Option[IpAddress] =
-    getIpString(ptrSa).map(s => IpAddress.fromString(s.takeWhile(_ != '%')).get)
+    if ptrSa eq null then None
+    else getIpString(ptrSa).map(s => IpAddress.fromString(s.takeWhile(_ != '%')).get)
 
   private def fromPcapIf(ptr: Ptr[pcap_if]): List[Interface] =
     val bldr = List.newBuilder[Interface]
@@ -45,7 +49,12 @@ object Pcap:
       val ptrSa: Ptr[sockaddr] = (!addr).addr
       val family = (!ptrSa).family.toInt
       if family == AF_INET || family == AF_INET6
-      then getIpAddress(ptrSa).foreach(s => bldr += SockAddr(s))
+      then
+        (getIpAddress(ptrSa),
+          getIpAddress((!addr).netmask),
+          if (!addr).broadaddr eq null then Some(None) else getIpAddress((!addr).broadaddr).map(Some(_)),
+          if (!addr).dstaddr eq null then Some(None) else getIpAddress((!addr).dstaddr).map(Some(_)),
+        ).mapN(SockAddr.apply).foreach(bldr += _)
       addr = (!addr).next
     bldr.result()
 
