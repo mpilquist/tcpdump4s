@@ -7,9 +7,11 @@ import scala.scalanative.unsafe.*
 import scala.scalanative.unsigned.*
 import scala.scalanative.posix.sys.socket.{AF_INET, AF_INET6}
 
+import com.comcast.ip4s.IpAddress
+
 object Pcap:
   case class Interface(name: String, description: String, addresses: List[SockAddr])
-  case class SockAddr(s: String)
+  case class SockAddr(address: IpAddress)
 //   case class SockAddr(addr, netmask, broadaddr, dstaddr)
 
   private def zone[A](f: Zone ?=> A): A = Zone(z => f(using z))
@@ -23,6 +25,9 @@ object Pcap:
     val serv = stackalloc[Byte](256)
     val rc = getnameinfo(ptrSa, (!ptrSa).len, host, 256, serv, 256, NI_NUMERICHOST)
     if rc == 0 then Some(fromNullableString(host)) else None
+
+  private def getIpAddress(ptrSa: Ptr[sockaddr]): Option[IpAddress] =
+    getIpString(ptrSa).map(s => IpAddress.fromString(s.takeWhile(_ != '%')).get)
 
   private def fromPcapIf(ptr: Ptr[pcap_if]): List[Interface] =
     val bldr = List.newBuilder[Interface]
@@ -40,7 +45,7 @@ object Pcap:
       val ptrSa: Ptr[sockaddr] = (!addr).addr
       val family = (!ptrSa).family.toInt
       if family == AF_INET || family == AF_INET6
-      then getIpString(ptrSa).foreach(s => bldr += SockAddr(s))
+      then getIpAddress(ptrSa).foreach(s => bldr += SockAddr(s))
       addr = (!addr).next
     bldr.result()
 
