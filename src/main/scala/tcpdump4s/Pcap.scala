@@ -25,21 +25,28 @@ object Pcap:
     if cstr eq null then "" else fromCString(cstr)
 
   private def getIpString(ptrSa: Ptr[sockaddr]): Option[String] =
-    val host = stackalloc[Byte](256)
-    val serv = stackalloc[Byte](256)
-    val rc = getnameinfo(ptrSa, (!ptrSa).len, host, 256, serv, 256, NI_NUMERICHOST)
+    val size = 256
+    val host = stackalloc[Byte](size)
+    val serv = stackalloc[Byte](size)
+    val rc = getnameinfo(ptrSa, (!ptrSa).len, host, size, serv, size, NI_NUMERICHOST)
     if rc == 0 then Some(fromNullableString(host)) else None
 
   private def getIpAddress(ptrSa: Ptr[sockaddr]): Option[IpAddress] =
     if ptrSa eq null then None
     else getIpString(ptrSa).map(s => IpAddress.fromString(s.takeWhile(_ != '%')).get)
 
+  private def getOptionalIpAddress(ptrSa: Ptr[sockaddr]): Option[Option[IpAddress]] =
+    if ptrSa eq null then Some(None) else getIpAddress(ptrSa).map(Some(_))
+
   private def fromPcapIf(ptr: Ptr[pcap_if]): List[Interface] =
     val bldr = List.newBuilder[Interface]
     var ptrPcapIf = ptr
     while ptrPcapIf ne null do
       val entry = !ptrPcapIf
-      bldr += Interface(fromCString(entry.name), fromNullableString(entry.description), fromPcapAddr(entry.addresses))
+      bldr += Interface(
+        fromCString(entry.name),
+        fromNullableString(entry.description),
+        fromPcapAddr(entry.addresses))
       ptrPcapIf = entry.next
     bldr.result()
 
@@ -53,8 +60,8 @@ object Pcap:
       then
         (getIpAddress(ptrSa),
           getIpAddress((!addr).netmask),
-          if (!addr).broadaddr eq null then Some(None) else getIpAddress((!addr).broadaddr).map(Some(_)),
-          if (!addr).dstaddr eq null then Some(None) else getIpAddress((!addr).dstaddr).map(Some(_)),
+          getOptionalIpAddress((!addr).broadaddr),
+          getOptionalIpAddress((!addr).dstaddr)
         ).mapN(SockAddr.apply).foreach(bldr += _)
       addr = (!addr).next
     bldr.result()
