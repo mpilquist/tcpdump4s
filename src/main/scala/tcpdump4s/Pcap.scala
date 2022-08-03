@@ -12,9 +12,18 @@ import cats.syntax.all.*
 import com.comcast.ip4s.{Cidr, IpAddress}
 
 object Pcap:
-  case class Interface(name: String, description: String, addresses: List[SockAddr])
-  case class SockAddr(address: IpAddress, netmask: IpAddress, broadcastAddress: Option[IpAddress], destinationAddress: Option[IpAddress]):
-    private def prefixCount: Int = netmask.toBytes.foldLeft(0)((acc, b) => acc + java.lang.Integer.bitCount(0xff & b))
+  case class Interface(name: String, description: String, addresses: List[Address])
+  case class Address(
+    address: IpAddress,
+    netmask: Option[IpAddress],
+    broadcastAddress: Option[IpAddress],
+    destinationAddress: Option[IpAddress]
+  ):
+    private def prefixCount: Int =
+      netmask
+        .map(_.toBytes.foldLeft(0)((acc, b) => acc + java.lang.Integer.bitCount(0xff & b)))
+        .getOrElse(address.toBytes.size * 8)
+
     // TODO ip4s should have a way to create a cidr from an address and netmask
     def cidr: Cidr[IpAddress] = Cidr(address, prefixCount)
 
@@ -50,8 +59,8 @@ object Pcap:
       ptrPcapIf = entry.next
     bldr.result()
 
-  private def fromPcapAddr(ptr: Ptr[pcap_addr]): List[SockAddr] =
-    val bldr = List.newBuilder[SockAddr]
+  private def fromPcapAddr(ptr: Ptr[pcap_addr]): List[Address] =
+    val bldr = List.newBuilder[Address]
     var addr = ptr
     while addr ne null do
       val ptrSa: Ptr[sockaddr] = (!addr).addr
@@ -59,10 +68,10 @@ object Pcap:
       if family == AF_INET || family == AF_INET6
       then
         (getIpAddress(ptrSa),
-          getIpAddress((!addr).netmask),
+          getOptionalIpAddress((!addr).netmask),
           getOptionalIpAddress((!addr).broadaddr),
           getOptionalIpAddress((!addr).dstaddr)
-        ).mapN(SockAddr.apply).foreach(bldr += _)
+        ).mapN(Address.apply).foreach(bldr += _)
       addr = (!addr).next
     bldr.result()
 
@@ -71,7 +80,10 @@ object Pcap:
       val p = alloc[Ptr[pcap_if]]()
       val errbuf = makeErrorBuffer
       val rc = pcap_findalldevs(p, errbuf)
-      if rc == 0 then fromPcapIf(!p)
-      else throw new RuntimeException(s"pcap_findalldevs failed with error code $rc: ${fromCString(errbuf)}")
+      try
+        if rc == 0 then fromPcapIf(!p)
+        else throw new RuntimeException(s"pcap_findalldevs failed with error code $rc: ${fromCString(errbuf)}")
+      finally
+        pcap_freealldevs(!p)
     }
   }

@@ -57,6 +57,7 @@ object libpcap:
   object functions:
     import types.*
     def pcap_findalldevs(interfaces: Ptr[Ptr[pcap_if]], errbuf: CString): CInt = extern
+    def pcap_freealldevs(interfaces: Ptr[pcap_if]): Unit = extern
 
     // TODO: getnameinfo not working on OS X, might need sn 0.5 with socket fixes
     def getnameinfo(sa: Ptr[sockaddr], salen: CSize, host: CString, hostlen: CInt, serv: CString, servlen: CInt, flags: CInt): CInt = extern
