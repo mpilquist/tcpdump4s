@@ -7,6 +7,7 @@ import scala.scalanative.unsafe.*
 import scala.scalanative.unsigned.*
 import scala.scalanative.posix.sys.socket.{AF_INET, AF_INET6}
 
+import cats.effect.IO
 import cats.syntax.all.*
 import com.comcast.ip4s.{Cidr, IpAddress}
 
@@ -58,7 +59,7 @@ object Pcap:
       addr = (!addr).next
     bldr.result()
 
-  def interfaces: List[Interface] =
+  def interfaces: IO[List[Interface]] = IO {
     zone {
       val p = alloc[Ptr[pcap_if]]()
       val errbuf = makeErrorBuffer
@@ -66,3 +67,4 @@ object Pcap:
       if rc == 0 then fromPcapIf(!p)
       else throw new RuntimeException(s"pcap_findalldevs failed with error code $rc: ${fromCString(errbuf)}")
     }
+  }
