@@ -4,7 +4,9 @@ import cats.effect.{IO, IOApp}
 import cats.syntax.all.*
 
 object Main extends IOApp.Simple {
-  def run: IO[Unit] =
+  def run: IO[Unit] = showInterfaces
+
+  def showInterfaces: IO[Unit] =
     Pcap.interfaces.flatMap { interfaces =>
       interfaces.traverse_ { interface =>
         IO.println(interface.name) *>

@@ -3,6 +3,7 @@ package tcpdump4s
 import scala.scalanative.unsafe.*
 import scala.scalanative.unsigned.*
 import scalanative.libc.*
+import scalanative.posix.sys.time.timeval
 
 object libpcap:
 
@@ -50,6 +51,31 @@ object libpcap:
         def addresses: Ptr[pcap_addr] = struct._4.asInstanceOf[Ptr[pcap_addr]]
         def flags: CUnsignedInt = struct._5
 
+    opaque type pcap = CStruct0
+    object pcap:
+      given _tag: Tag[pcap] = Tag.materializeCStruct0Tag
+
+    opaque type pcap_pkthdr = CStruct3[timeval, CUnsignedInt, CUnsignedInt]
+    object pcap_pkthdr:
+      given _tag: Tag[pcap_pkthdr] = Tag.materializeCStruct3Tag[timeval, CUnsignedInt, CUnsignedInt]
+      extension (struct: pcap_pkthdr)
+        def ts: timeval = struct._1
+        def caplen: CUnsignedInt = struct._2
+        def len: CUnsignedInt = struct._3
+
+    opaque type bpf_insn = CStruct4[CUnsignedShort, CUnsignedChar, CUnsignedChar, CUnsignedInt]
+    object bpf_insn:
+      given _tag: Tag[bpf_insn] = Tag.materializeCStruct4Tag[CUnsignedShort, CUnsignedChar, CUnsignedChar, CUnsignedInt]
+      extension (struct: bpf_insn)
+        def code: CUnsignedShort = struct._1
+        def jt: CUnsignedChar = struct._2
+        def jf: CUnsignedChar = struct._3
+        def k: CUnsignedInt = struct._4
+
+    opaque type bpf_program = CStruct2[CUnsignedInt, Ptr[bpf_insn]]
+    object bpf_program:
+      given _tag: Tag[bpf_program] = Tag.materializeCStruct2Tag[CUnsignedInt, Ptr[bpf_insn]]
+
   val NI_NUMERICHOST: CInt = 2
 
   @link("pcap")
@@ -58,6 +84,10 @@ object libpcap:
     import types.*
     def pcap_findalldevs(interfaces: Ptr[Ptr[pcap_if]], errbuf: CString): CInt = extern
     def pcap_freealldevs(interfaces: Ptr[pcap_if]): Unit = extern
+    def pcap_open_live(device: CString, snaplen: CInt, promisc: CInt, to_ms: CInt, errbuf: CString): Ptr[pcap] = extern
+    def pcap_compile(p: Ptr[pcap], fp: Ptr[bpf_program], str: CString, optimize: CInt, netmask: CUnsignedInt): CInt = extern
+    def pcap_setfilter(p: Ptr[pcap], fp: Ptr[bpf_program]): CInt = extern
+    def pcap_next_ex(p: Ptr[pcap], pkt_header: Ptr[Ptr[pcap_pkthdr]], pkt_data: Ptr[Ptr[Byte]]): Int = extern
 
     // TODO: getnameinfo not working on OS X, might need sn 0.5 with socket fixes
     def getnameinfo(sa: Ptr[sockaddr], salen: CSize, host: CString, hostlen: CInt, serv: CString, servlen: CInt, flags: CInt): CInt = extern
