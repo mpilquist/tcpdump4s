@@ -87,3 +87,28 @@ object Pcap:
         pcap_freealldevs(!p)
     }
   }
+
+  def openLive(device: String, promiscuousMode: Boolean): IO[Pcap] = IO {
+    zone {
+      val errbuf = makeErrorBuffer
+      val p = pcap_open_live(toCString(device), 65535, if promiscuousMode then 1 else 0, 0, errbuf)
+      if p eq null then throw new RuntimeException(s"pcap_open_live failed with error: ${fromCString(errbuf)}")
+      else new Pcap(p)
+    }
+  }
+
+class Pcap private (p: Ptr[pcap]):
+  import Pcap.*
+
+  def setFilter(s: String): IO[Unit] = IO {
+    zone {
+      val fp = alloc[bpf_program]()
+      var rc = pcap_compile(p, fp, toCString(s), 1, -1.toUInt)
+      if rc != 0 then throw new RuntimeException(s"pcap_compile failed with error code: $rc")
+      rc = pcap_setfilter(p, fp)
+      if rc != 0 then throw new RuntimeException(s"pcap_setfilter failed with error code: $rc")
+    }
+  }
+
+  def next = ??? //: IO[TimeStamped[Packet]] = ???
+
