@@ -3,13 +3,17 @@ package tcpdump4s
 import libpcap.*
 import libpcap.types.*
 import libpcap.functions.*
+import scala.concurrent.duration.*
 import scala.scalanative.unsafe.*
 import scala.scalanative.unsigned.*
 import scala.scalanative.posix.sys.socket.{AF_INET, AF_INET6}
+import scalanative.posix.sys.timeOps.timevalValOps
 
 import cats.effect.IO
 import cats.syntax.all.*
 import com.comcast.ip4s.{Cidr, IpAddress}
+import fs2.timeseries.TimeStamped
+import scodec.bits.ByteVector
 
 object Pcap:
   case class Interface(name: String, description: String, addresses: List[Address])
@@ -91,7 +95,7 @@ object Pcap:
   def openLive(device: String, promiscuousMode: Boolean): IO[Pcap] = IO {
     zone {
       val errbuf = makeErrorBuffer
-      val p = pcap_open_live(toCString(device), 65535, if promiscuousMode then 1 else 0, 0, errbuf)
+      val p = pcap_open_live(toCString(device), 65535, if promiscuousMode then 1 else 0, 100, errbuf)
       if p eq null then throw new RuntimeException(s"pcap_open_live failed with error: ${fromCString(errbuf)}")
       else new Pcap(p)
     }
@@ -110,5 +114,18 @@ class Pcap private (p: Ptr[pcap]):
     }
   }
 
-  def next = ??? //: IO[TimeStamped[Packet]] = ???
+  def next: IO[TimeStamped[ByteVector]] = IO {
+    zone {
+      val ppHdr = alloc[Ptr[pcap_pkthdr]]()
+      val ppData = alloc[Ptr[Byte]]()
+      var rc = 0
+      while rc == 0 do rc = pcap_next_ex(p, ppHdr, ppData)
+      if rc != 1 then throw new RuntimeException(s"pcap_next_ex failed with error code: $rc")
+      val pHdr = !ppHdr
+      // TODO handle microseconds and timezone
+      val ts = (!pHdr).ts.tv_sec.toInt.seconds
+      val size = (!pHdr).caplen.toInt
+      TimeStamped(ts, ByteVector.fromPtr(!ppData, size))
+    }
+  }
 

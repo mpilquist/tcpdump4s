@@ -3,9 +3,20 @@ package tcpdump4s
 import cats.effect.{IO, IOApp}
 import cats.syntax.all.*
 
+import fs2.Stream
+
 object Main extends IOApp.Simple {
-  def run: IO[Unit] =
-    Pcap.openLive("en0", false).flatTap(_.setFilter("udp")).flatMap(IO.println)
+  def run: IO[Unit] = dumpUdpOnEn0
+
+  def dumpUdpOnEn0: IO[Unit] =
+    Stream.eval(
+      Pcap.openLive("en0", false)
+        .flatTap(_.setFilter("udp"))
+    ).flatMap(p => Stream.repeatEval(p.next))
+      .evalMap(t =>
+        IO.println(t.time) *> IO(t.value.printHexDump()) *> IO.println("")
+      )
+      .compile.drain
 
   def showInterfaces: IO[Unit] =
     Pcap.interfaces.flatMap { interfaces =>
