@@ -12,6 +12,7 @@ import scalanative.posix.sys.timeOps.timevalValOps
 import cats.effect.{IO, Resource}
 import cats.syntax.all.*
 import com.comcast.ip4s.{Cidr, IpAddress}
+import fs2.Stream
 import fs2.timeseries.TimeStamped
 import scodec.bits.ByteVector
 
@@ -102,6 +103,11 @@ object Pcap:
       }
     })(_.close)
 
+  def livePackets(device: String, promiscuousMode: Boolean, filter: String): Stream[IO, TimeStamped[ByteVector]] =
+    Stream.resource(Pcap.openLive(device, promiscuousMode))
+      .evalTap(_.setFilter(filter))
+      .flatMap(p => Stream.repeatEval(p.next))
+
 class Pcap private (p: Ptr[pcap]):
   import Pcap.*
 
@@ -123,8 +129,7 @@ class Pcap private (p: Ptr[pcap]):
       while rc == 0 do rc = pcap_next_ex(p, ppHdr, ppData)
       if rc != 1 then throw new RuntimeException(s"pcap_next_ex failed with error code: $rc")
       val pHdr = !ppHdr
-      // TODO handle microseconds and timezone
-      val ts = (!pHdr).ts.tv_sec.toInt.seconds
+      val ts = (!pHdr).ts.tv_sec.toInt.seconds + (!pHdr).ts.tv_usec.toInt.microseconds
       val size = (!pHdr).caplen.toInt
       TimeStamped(ts, ByteVector.fromPtr(!ppData, size))
     }
