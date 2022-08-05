@@ -9,10 +9,9 @@ object Main extends IOApp.Simple {
   def run: IO[Unit] = dumpUdpOnEn0
 
   def dumpUdpOnEn0: IO[Unit] =
-    Stream.eval(
-      Pcap.openLive("en0", false)
-        .flatTap(_.setFilter("udp"))
-    ).flatMap(p => Stream.repeatEval(p.next))
+    Stream.resource(Pcap.openLive("en0", false))
+      .evalTap(_.setFilter("udp"))
+      .flatMap(p => Stream.repeatEval(p.next))
       .evalMap(t =>
         IO.println(t.time) *> IO(t.value.printHexDump()) *> IO.println("")
       )

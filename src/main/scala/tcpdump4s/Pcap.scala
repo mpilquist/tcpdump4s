@@ -9,7 +9,7 @@ import scala.scalanative.unsigned.*
 import scala.scalanative.posix.sys.socket.{AF_INET, AF_INET6}
 import scalanative.posix.sys.timeOps.timevalValOps
 
-import cats.effect.IO
+import cats.effect.{IO, Resource}
 import cats.syntax.all.*
 import com.comcast.ip4s.{Cidr, IpAddress}
 import fs2.timeseries.TimeStamped
@@ -92,14 +92,15 @@ object Pcap:
     }
   }
 
-  def openLive(device: String, promiscuousMode: Boolean): IO[Pcap] = IO {
-    zone {
-      val errbuf = makeErrorBuffer
-      val p = pcap_open_live(toCString(device), 65535, if promiscuousMode then 1 else 0, 100, errbuf)
-      if p eq null then throw new RuntimeException(s"pcap_open_live failed with error: ${fromCString(errbuf)}")
-      else new Pcap(p)
-    }
-  }
+  def openLive(device: String, promiscuousMode: Boolean): Resource[IO, Pcap] =
+    Resource.make(IO {
+      zone {
+        val errbuf = makeErrorBuffer
+        val p = pcap_open_live(toCString(device), 65535, if promiscuousMode then 1 else 0, 100, errbuf)
+        if p eq null then throw new RuntimeException(s"pcap_open_live failed with error: ${fromCString(errbuf)}")
+        else new Pcap(p)
+      }
+    })(_.close)
 
 class Pcap private (p: Ptr[pcap]):
   import Pcap.*
@@ -128,4 +129,7 @@ class Pcap private (p: Ptr[pcap]):
       TimeStamped(ts, ByteVector.fromPtr(!ppData, size))
     }
   }
+
+  private def close: IO[Unit] =
+    IO(pcap_close(p))
 
