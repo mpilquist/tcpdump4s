@@ -63,8 +63,8 @@ enum DecodedPacketPart:
     case UnsupportedEtherType(etherType) =>
       Renderer.faint(s"""Unsupported ether type ${etherType.getOrElse("n/a")}""")
     case UnsupportedIpProtocol(p, name) =>
-      val nm = name.getOrElse(p.toString)
-      Renderer.faint(f"${name}%-10sUndecoded")
+      val nm = name.getOrElse(s"Proto $p")
+      Renderer.faint(f"${nm}%-12s<undecoded>")
 
 case class DecodedPacket(undecoded: ByteVector, parts: List[DecodedPacketPart], payload: ByteVector):
   def render(ts: FiniteDuration): String =
