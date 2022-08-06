@@ -1,5 +1,6 @@
 package tcpdump4s
 
+import scala.concurrent.duration.FiniteDuration
 import com.comcast.ip4s.IpAddress
 import scodec.{Decoder, Err, codecs}
 import scodec.bits.ByteVector
@@ -18,35 +19,70 @@ object IpHeader:
   def apply(v4: Ipv4Header): IpHeader = Left(v4)
   def apply(v6: Ipv6Header): IpHeader = Right(v6)
 
+object Ansi:
+  val Faint = "\u001b[;2m"
+  val Normal = "\u001b[;22m"
+
+object Renderer:
+  def values(header: Option[String], values: List[(String, Any)]): String =
+    val bldr = new StringBuilder
+    val h = header.getOrElse("")
+    bldr.append(Ansi.Faint).append(f"${h}%-10s").append(Ansi.Normal)
+    values.foldLeft(0) { case (acc, (label, value)) =>
+      val valueStr = value.toString
+      val newline = acc >= 70
+      if newline then bldr.append("\n          ")
+      bldr.append(Ansi.Faint).append(f"${label}%-5s").append(" ").append(Ansi.Normal).append(f"${valueStr}%-20s")
+      val chars = label.size.max(5) + 1 + valueStr.size.max(20)
+      val newlineAfter = valueStr.size > 20
+      if newlineAfter then bldr.append("\n          ")
+      if newlineAfter then 10 else (if newline then 0 else acc) + chars
+    }
+    bldr.toString
+
+  def faint(s: String): String =
+    val bldr = new StringBuilder
+    bldr.append(Ansi.Faint).append(s).append(Ansi.Normal)
+    bldr.toString
+
 enum DecodedPacketPart:
   case Ethernet(value: EthernetFrameHeader)
   case Ip(value: IpHeader)
   case Tcp(value: TcpHeader)
   case Udp(value: DatagramHeader)
   case UnsupportedEtherType(ethertype: Option[Int])
-  case UnsupportedIpProtocol(protocol: Int)
+  case UnsupportedIpProtocol(protocol: Int, name: Option[String])
 
   def render: String = this match
-    case Ethernet(v) => f"Ethernet: src: ${v.source}%-20s dst: ${v.destination}"
-    case Ip(v)       => f"IP:       src: ${v.sourceIp}%-20s dst: ${v.destinationIp}"
-    case Tcp(v)      => f"TCP:      src: ${v.sourcePort}%-20s dst: ${v.destinationPort}\n          seq: ${v.sequenceNumber}%-20d ack: ${v.ackNumber}%-20d win: ${v.windowSize}"
-    case Udp(v)      => f"UDP:      src: ${v.sourcePort}%-20s dst: ${v.destinationPort}"
-    case UnsupportedEtherType(etherType) => s"""Unsupported ether type ${etherType.getOrElse("n/a")}"""
-    case UnsupportedIpProtocol(p) => s"Unsupported IP protocol $p"
+    case Ethernet(v) => Renderer.values(Some("Ethernet"), List("src" -> v.source, "dst" -> v.destination))
+    case Ip(v)       => Renderer.values(Some("IP"), List("src" -> v.sourceIp, "dst" -> v.destinationIp))
+    case Tcp(v)      =>
+      Renderer.values(Some("TCP"), List("src" -> v.sourcePort, "dst" -> v.destinationPort, "" -> "", "seq" -> v.sequenceNumber, "ack" -> v.ackNumber, "win" -> v.windowSize))
+    case Udp(v)      =>
+      Renderer.values(Some("UDP"), List("src" -> v.sourcePort, "dst" -> v.destinationPort))
+    case UnsupportedEtherType(etherType) =>
+      Renderer.faint(s"""Unsupported ether type ${etherType.getOrElse("n/a")}""")
+    case UnsupportedIpProtocol(p, name) =>
+      val nm = name.getOrElse(p.toString)
+      Renderer.faint(f"${name}%-10sUndecoded")
 
-case class DecodedPacket(parts: List[DecodedPacketPart]):
-  def render: String = parts.map(_.render).mkString("", "\n", "")
+case class DecodedPacket(undecoded: ByteVector, parts: List[DecodedPacketPart], payload: ByteVector):
+  def render(ts: FiniteDuration): String =
+    val bldr = new StringBuilder
+    val rows = Renderer.values(Some("Packet"), List("time" -> ts.toMillis, "len" -> undecoded.size)) :: parts.map(_.render)
+    bldr.append(rows.mkString("", "\n", "\n"))
+    bldr.append(payload.toHexDumpColorized)
+    bldr.toString
 
 object DecodedPacket:
 
-  private val decoder: Decoder[DecodedPacket] =
+  private val decoder: Decoder[List[DecodedPacketPart]] =
     EthernetFrameHeader.codec.flatMap { ethernetHeader =>
       val part = DecodedPacketPart.Ethernet(ethernetHeader)
-      val next = ethernetHeader.ethertype match
+      ethernetHeader.ethertype match
         case Some(EtherType.IPv4) => decodeIpv4Header(part :: Nil)
         case Some(EtherType.IPv6) => decodeIpv6Header(part :: Nil)
         case o => Decoder.pure(DecodedPacketPart.UnsupportedEtherType(o) :: part :: Nil)
-      next.map(parts => DecodedPacket(parts.reverse))
     }
 
   private def decodeIpv4Header(acc: List[DecodedPacketPart]): Decoder[List[DecodedPacketPart]] =
@@ -61,7 +97,17 @@ object DecodedPacket:
       ipHeader.protocol match
         case 6 => decodeTcpHeader(part :: acc)
         case 17 => decodeUdpDatagram(part :: acc)
-        case o => Decoder.pure(DecodedPacketPart.UnsupportedIpProtocol(o) :: part :: acc)
+        case o =>
+          val name = o match
+            case 0 => Some("HOPOPT")
+            case 1 => Some("ICMP")
+            case 2 => Some("IGMP")
+            case 58 => Some("IPv6-ICMP")
+            case 59 => Some("IPv6-NoNxt")
+            case 60 => Some("IPv6-Opts")
+            case 115 => Some("L2TP")
+            case _ => None
+          Decoder.pure(DecodedPacketPart.UnsupportedIpProtocol(o, name) :: part :: acc)
     }
 
   private def decodeUdpDatagram(acc: List[DecodedPacketPart]): Decoder[List[DecodedPacketPart]] =
@@ -71,5 +117,7 @@ object DecodedPacket:
     TcpHeader.codec.map(tcp => DecodedPacketPart.Tcp(tcp) :: acc)
 
   def decode(bytes: ByteVector) =
-    decoder.decode(bytes.bits)
+    decoder.decode(bytes.bits).map { res =>
+      DecodedPacket(bytes, res.value.reverse, res.remainder.bytes)
+    }
 

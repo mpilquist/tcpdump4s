@@ -16,7 +16,7 @@ object Main extends IOApp:
 
       val captureOpt =
         val interface = Opts.option[String]("interface", short = "i", help = "name of the interface to capture on")
-        val expression = Opts.argument[String](metavar = "expression")
+        val expression = Opts.argument[String](metavar = "expression").orNone
         (interface, expression).mapN(capture)
 
       showInterfacesOpt orElse captureOpt
@@ -36,10 +36,9 @@ object Main extends IOApp:
       }
     }
 
-  def capture(interface: String, expression: String): IO[Unit] =
+  def capture(interface: String, expression: Option[String]): IO[Unit] =
     Pcap.livePackets(interface, false, expression, expectedLinkType = Some(1))
       .map(_.map(b => DecodedPacket.decode(b).require))
-      .evalMap(t => IO.println(t.time) *> IO.println(t.value.value.render) *> IO(t.value.remainder.printHexDump()) *> IO.println(""))
-      //.evalMap(t => IO.println(t.time) *> IO(t.value.printHexDump()) *> IO.println(""))
+      .evalMap(t => IO.println(t.value.render(t.time)) *> IO.println(""))
       .compile.drain.as(ExitCode.Success)
 
