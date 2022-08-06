@@ -89,6 +89,7 @@ object libpcap:
     def pcap_setfilter(p: Ptr[pcap], fp: Ptr[bpf_program]): CInt = extern
     def pcap_next_ex(p: Ptr[pcap], pkt_header: Ptr[Ptr[pcap_pkthdr]], pkt_data: Ptr[Ptr[Byte]]): Int = extern
     def pcap_close(p: Ptr[pcap]): Unit = extern
+    def pcap_datalink(p: Ptr[pcap]): CInt = extern
 
     // TODO: built-in getnameinfo not working on OS X, might need sn 0.5 with socket fixes
     def getnameinfo(sa: Ptr[sockaddr], salen: CSize, host: CString, hostlen: CInt, serv: CString, servlen: CInt, flags: CInt): CInt = extern
