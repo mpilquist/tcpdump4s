@@ -2,13 +2,14 @@ package tcpdump4s
 
 import scala.concurrent.duration.FiniteDuration
 import com.comcast.ip4s.IpAddress
-import scodec.{Decoder, Err, codecs}
+import scodec.{Attempt, Decoder, Err, codecs}
 import scodec.bits.ByteVector
 import fs2.protocols.ethernet.{EtherType, EthernetFrameHeader}
 //import fs2.protocols.ip.IpHeader
 import fs2.protocols.ip.{Ipv4Header, Ipv6Header}
 import fs2.protocols.ip.tcp.TcpHeader
 import fs2.protocols.ip.udp.DatagramHeader
+import fs2.protocols.pcap.LinkType
 
 opaque type IpHeader = Either[Ipv4Header, Ipv6Header]
 object IpHeader:
@@ -50,16 +51,30 @@ enum DecodedPacketPart:
   case Ip(value: IpHeader)
   case Tcp(value: TcpHeader)
   case Udp(value: DatagramHeader)
+  case UnsupportedLinkType(linkType: LinkType)
   case UnsupportedEtherType(ethertype: Option[Int])
   case UnsupportedIpProtocol(protocol: Int, name: Option[String])
 
   def render: String = this match
-    case Ethernet(v) => Renderer.values(Some("Ethernet"), List("src" -> v.source, "dst" -> v.destination))
-    case Ip(v)       => Renderer.values(Some("IP"), List("src" -> v.sourceIp, "dst" -> v.destinationIp))
-    case Tcp(v)      =>
-      Renderer.values(Some("TCP"), List("src" -> v.sourcePort, "dst" -> v.destinationPort, "" -> "", "seq" -> v.sequenceNumber, "ack" -> v.ackNumber, "win" -> v.windowSize))
-    case Udp(v)      =>
+    case Ethernet(v) =>
+      Renderer.values(Some("Ethernet"), List(
+        "src" -> v.source,
+        "dst" -> v.destination))
+    case Ip(v) =>
+      Renderer.values(Some("IP"), List(
+        "src" -> v.sourceIp,
+        "dst" -> v.destinationIp))
+    case Tcp(v) =>
+      Renderer.values(Some("TCP"), List(
+        "src" -> v.sourcePort,
+        "dst" -> v.destinationPort,
+        "seq" -> v.sequenceNumber,
+        "ack" -> v.ackNumber,
+        "win" -> v.windowSize))
+    case Udp(v) =>
       Renderer.values(Some("UDP"), List("src" -> v.sourcePort, "dst" -> v.destinationPort))
+    case UnsupportedLinkType(linkType) =>
+      Renderer.faint(s"Unsupported link type ${linkType}")
     case UnsupportedEtherType(etherType) =>
       Renderer.faint(s"""Unsupported ether type ${etherType.getOrElse("n/a")}""")
     case UnsupportedIpProtocol(p, name) =>
@@ -69,14 +84,15 @@ enum DecodedPacketPart:
 case class DecodedPacket(undecoded: ByteVector, parts: List[DecodedPacketPart], payload: ByteVector):
   def render(ts: FiniteDuration): String =
     val bldr = new StringBuilder
-    val rows = Renderer.values(Some("Packet"), List("time" -> ts.toMillis, "len" -> undecoded.size)) :: parts.map(_.render)
+    val packetPart = Renderer.values(Some("Packet"), List("time" -> ts.toMillis, "len" -> undecoded.size))
+    val rows = packetPart :: parts.map(_.render)
     bldr.append(rows.mkString("", "\n", "\n"))
     bldr.append(payload.toHexDumpColorized)
     bldr.toString
 
 object DecodedPacket:
 
-  private val decoder: Decoder[List[DecodedPacketPart]] =
+  private val decodeEthernet: Decoder[List[DecodedPacketPart]] =
     EthernetFrameHeader.codec.flatMap { ethernetHeader =>
       val part = DecodedPacketPart.Ethernet(ethernetHeader)
       ethernetHeader.ethertype match
@@ -116,8 +132,18 @@ object DecodedPacket:
   private def decodeTcpHeader(acc: List[DecodedPacketPart]): Decoder[List[DecodedPacketPart]] =
     TcpHeader.codec.map(tcp => DecodedPacketPart.Tcp(tcp) :: acc)
 
-  def decode(bytes: ByteVector) =
-    decoder.decode(bytes.bits).map { res =>
-      DecodedPacket(bytes, res.value.reverse, res.remainder.bytes)
+  private def decodeIpv4OrIpv6Header(acc: List[DecodedPacketPart]): Decoder[List[DecodedPacketPart]] =
+    codecs.peek(codecs.uint4).flatMap {
+      case 4 => decodeIpv4Header(acc)
+      case _ => decodeIpv6Header(acc)
     }
+
+  def decode(bytes: ByteVector, linkType: LinkType): Attempt[DecodedPacket] =
+    val decoder = linkType match
+      case LinkType.Ethernet => decodeEthernet
+      case LinkType.Raw => decodeIpv4OrIpv6Header(Nil)
+      case LinkType.Unknown(12) => decodeIpv4OrIpv6Header(Nil)
+      case other => Decoder.pure(DecodedPacketPart.UnsupportedLinkType(other) :: Nil)
+    val parts = decoder.decode(bytes.bits)
+    parts.map(res => DecodedPacket(bytes, res.value.reverse, res.remainder.bytes))
 

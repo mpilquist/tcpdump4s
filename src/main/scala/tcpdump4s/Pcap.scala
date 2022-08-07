@@ -13,6 +13,7 @@ import cats.effect.{IO, Resource}
 import cats.syntax.all.*
 import com.comcast.ip4s.{Cidr, IpAddress}
 import fs2.Stream
+import fs2.protocols.pcap.LinkType
 import fs2.timeseries.TimeStamped
 import scodec.bits.ByteVector
 
@@ -103,11 +104,10 @@ object Pcap:
       }
     })(_.close)
 
-  def livePackets(device: String, promiscuousMode: Boolean, filter: Option[String], expectedLinkType: Option[Int]): Stream[IO, TimeStamped[ByteVector]] =
+  def livePackets(device: String, promiscuousMode: Boolean, filter: Option[String]): Stream[IO, (LinkType, Stream[IO, TimeStamped[ByteVector]])] =
     Stream.resource(Pcap.openLive(device, promiscuousMode))
       .evalTap(p => filter.map(fltr => p.setFilter(fltr)).getOrElse(IO.unit))
-      .evalTap(p => expectedLinkType.map(elt => IO(if p.linkType != elt then sys.error(s"livePackets: expected link type $elt but got ${p.linkType}"))).getOrElse(IO.unit))
-      .flatMap(p => Stream.repeatEval(p.next))
+      .map(p => LinkType.fromLong(p.linkType) -> Stream.repeatEval(p.next))
 
 class Pcap private (p: Ptr[pcap]):
   import Pcap.*
