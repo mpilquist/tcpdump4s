@@ -104,7 +104,11 @@ object Pcap:
       }
     })(_.close)
 
-  def livePackets(device: String, promiscuousMode: Boolean, filter: Option[String]): Stream[IO, (LinkType, Stream[IO, TimeStamped[ByteVector]])] =
+  def livePackets(
+    device: String,
+    promiscuousMode: Boolean,
+    filter: Option[String]
+  ): Stream[IO, (LinkType, Stream[IO, TimeStamped[ByteVector]])] =
     Stream.resource(Pcap.openLive(device, promiscuousMode))
       .evalTap(p => filter.map(fltr => p.setFilter(fltr)).getOrElse(IO.unit))
       .map(p => LinkType.fromLong(p.linkType) -> Stream.repeatEval(p.next))
@@ -113,6 +117,13 @@ class Pcap private (p: Ptr[pcap]):
   import Pcap.*
 
   val linkType: Int = pcap_datalink(p)
+
+  def setLinkType(dlt: Int): IO[Unit] = IO {
+    val rc = pcap_set_datalink(p, dlt)
+    if rc != 0 then
+      val err = pcap_geterr(p)
+      throw new RuntimeException("setLinkType failed: " + fromCString(err))
+  }
 
   def setFilter(s: String): IO[Unit] = IO {
     zone {
