@@ -8,6 +8,7 @@ import scalanative.posix.sys.time.timeval
 object libpcap:
 
   object types:
+    // TODO use built-in posix type here
     opaque type sockaddr = CStruct2[UByte, UByte]
     object sockaddr:
       given _tag: Tag[sockaddr] = Tag.materializeCStruct2Tag[UByte, UByte]
@@ -15,6 +16,7 @@ object libpcap:
         def len: UByte = struct._1
         def family: UByte = struct._2
 
+    // TODO use built-in posix type here
     opaque type sockaddr_in = CStruct5[UByte, UByte, UShort, UInt, CArray[CChar, Nat._8]]
     object sockaddr_in:
       given _tag: Tag[sockaddr_in] = Tag.materializeCStruct5Tag[UByte, UByte, UShort, UInt, CArray[CChar, Nat._8]]
@@ -24,6 +26,7 @@ object libpcap:
         def sin_port: UShort = struct._3
         def sin_addr: UInt = struct._4
 
+    // TODO use built-in posix type here
     opaque type sockaddr_in6 = CStruct6[UByte, UByte, UShort, UInt, CArray[Byte, Nat.Digit2[Nat._1, Nat._6]], UInt]
     object sockaddr_in6:
       given _tag: Tag[sockaddr_in6] = Tag.materializeCStruct6Tag[UByte, UByte, UShort, UInt, CArray[Byte, Nat.Digit2[Nat._1, Nat._6]], UInt]
@@ -76,6 +79,7 @@ object libpcap:
     object bpf_program:
       given _tag: Tag[bpf_program] = Tag.materializeCStruct2Tag[CUnsignedInt, Ptr[bpf_insn]]
 
+  // TODO remove when switching to built-in getnameinfo
   val NI_NUMERICHOST: CInt = 2
 
   @link("pcap")

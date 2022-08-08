@@ -28,12 +28,14 @@ object Main extends IOApp:
 
   def showInterfaces: IO[Unit] =
     Pcap.interfaces.flatMap { interfaces =>
-      interfaces.traverse_ { interface =>
-        IO.println(interface.name) *>
-          interface.addresses.traverse_ { addr =>
-            IO.println(s"  ${addr.cidr}")
-          }
-      }
+      interfaces
+        .filter(i => i.flags.isUp && i.flags.isRunning)
+        .traverse_ { interface =>
+          IO.println(interface.name) *>
+            interface.addresses.traverse_ { addr =>
+              IO.println(s"  ${addr.cidr}")
+            }
+        }
     }
 
   def capture(interface: String, expression: Option[String]): IO[Unit] =

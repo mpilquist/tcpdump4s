@@ -18,7 +18,7 @@ import fs2.timeseries.TimeStamped
 import scodec.bits.ByteVector
 
 object Pcap:
-  case class Interface(name: String, description: String, addresses: List[Address])
+  case class Interface(name: String, description: String, addresses: List[Address], flags: InterfaceFlags)
   case class Address(
     address: IpAddress,
     netmask: Option[IpAddress],
@@ -32,6 +32,13 @@ object Pcap:
 
     // TODO ip4s should have a way to create a cidr from an address and netmask
     def cidr: Cidr[IpAddress] = Cidr(address, prefixCount)
+
+  opaque type InterfaceFlags = CUnsignedInt
+  extension (self: InterfaceFlags)
+    def isLoopback: Boolean = (self.toInt & 1) > 0
+    def isUp: Boolean = (self.toInt & 2) > 0
+    def isRunning: Boolean = (self.toInt & 4) > 0
+    def isWireless: Boolean = (self.toInt & 8) > 0
 
   private def zone[A](f: Zone ?=> A): A = Zone(z => f(using z))
 
@@ -61,7 +68,8 @@ object Pcap:
       bldr += Interface(
         fromCString(entry.name),
         fromNullableString(entry.description),
-        fromPcapAddr(entry.addresses))
+        fromPcapAddr(entry.addresses),
+        entry.flags)
       ptrPcapIf = entry.next
     bldr.result()
 
