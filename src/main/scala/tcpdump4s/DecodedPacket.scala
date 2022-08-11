@@ -5,20 +5,10 @@ import com.comcast.ip4s.IpAddress
 import scodec.{Attempt, Decoder, Err, codecs}
 import scodec.bits.ByteVector
 import fs2.protocols.ethernet.{EtherType, EthernetFrameHeader}
-//import fs2.protocols.ip.IpHeader
-import fs2.protocols.ip.{Ipv4Header, Ipv6Header}
+import fs2.protocols.ip.{IpHeader, Ipv4Header, Ipv6Header}
 import fs2.protocols.ip.tcp.TcpHeader
 import fs2.protocols.ip.udp.DatagramHeader
 import fs2.protocols.pcap.LinkType
-
-opaque type IpHeader = Either[Ipv4Header, Ipv6Header]
-object IpHeader:
-  extension (self: IpHeader)
-    def sourceIp: IpAddress = self.fold(_.sourceIp, _.sourceIp)
-    def destinationIp: IpAddress = self.fold(_.destinationIp, _.destinationIp)
-    def protocol: Int = self.fold(_.protocol, _.protocol)
-  def apply(v4: Ipv4Header): IpHeader = Left(v4)
-  def apply(v6: Ipv6Header): IpHeader = Right(v6)
 
 object Ansi:
   val Faint = "\u001b[;2m"
@@ -102,10 +92,10 @@ object DecodedPacket:
     }
 
   private def decodeIpv4Header(acc: List[DecodedPacketPart]): Decoder[List[DecodedPacketPart]] =
-    decodeIpHeader(acc, Ipv4Header.codec.map(IpHeader(_)))
+    decodeIpHeader(acc, Ipv4Header.codec)
 
   private def decodeIpv6Header(acc: List[DecodedPacketPart]): Decoder[List[DecodedPacketPart]] =
-    decodeIpHeader(acc, Ipv6Header.codec.map(IpHeader(_)))
+    decodeIpHeader(acc, Ipv6Header.codec)
 
   private def decodeIpHeader(acc: List[DecodedPacketPart], decoder: Decoder[IpHeader]): Decoder[List[DecodedPacketPart]] =
     decoder.flatMap { ipHeader =>
