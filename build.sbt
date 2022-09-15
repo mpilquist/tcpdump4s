@@ -5,7 +5,7 @@ enablePlugins(ScalaNativePlugin)
 resolvers ++= Resolver.sonatypeOssRepos("snapshots")
 
 libraryDependencies ++= List(
-  "com.armanbilge" %%% "ip4s-core" % "3.1.1-177-8abd977-SNAPSHOT",
-  "com.armanbilge" %%% "fs2-protocols" % "3.2.12-4-9e9986f-SNAPSHOT",
+  "com.comcast" %%% "ip4s-core" % "3.2.0",
+  "co.fs2" %%% "fs2-protocols" % "3.3.0",
   "com.armanbilge" %%% "decline" % "2.2.1-SNAPSHOT"
 )
