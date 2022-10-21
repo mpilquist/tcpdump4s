@@ -9,3 +9,4 @@ target
 .bloop
 project/metals.sbt
 project/project
+tcpdump4s

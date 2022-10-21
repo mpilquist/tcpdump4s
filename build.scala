@@ -1,0 +1,7 @@
+//> using scala "3.2.0"
+//> using platform "scala-native"
+//> using repository "sonatype-s01:snapshots"
+//> using packaging.output "tcpdump4s"
+//> using lib "com.comcast::ip4s-core::3.2.0"
+//> using lib "co.fs2::fs2-protocols::3.3.0"
+//> using lib "com.armanbilge::decline::2.2.1-SNAPSHOT"
