@@ -42,7 +42,7 @@ object Pcap:
 
   private def zone[A](f: Zone ?=> A): A = Zone(z => f(using z))
 
-  private def makeErrorBuffer(using Zone) = alloc[Byte](256)
+  private def makeErrorBuffer(using Zone) = alloc[CChar](256)
   private def fromNullableString(cstr: CString): String =
     if cstr eq null then "" else fromCString(cstr)
 
@@ -116,8 +116,8 @@ object Pcap:
     device: String,
     promiscuousMode: Boolean,
     filter: Option[String]
-  ): Stream[IO, (LinkType, Stream[IO, TimeStamped[ByteVector]])] =
-    Stream.resource(Pcap.openLive(device, promiscuousMode))
+  ): Resource[IO, (LinkType, Stream[IO, TimeStamped[ByteVector]])] =
+    Pcap.openLive(device, promiscuousMode)
       .evalTap(p => filter.map(fltr => p.setFilter(fltr)).getOrElse(IO.unit))
       .map(p => LinkType.fromLong(p.linkType) -> Stream.repeatEval(p.next))
 

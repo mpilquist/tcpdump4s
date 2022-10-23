@@ -40,7 +40,9 @@ object Main extends IOApp:
 
   def capture(interface: String, expression: Option[String]): IO[Unit] =
     Pcap.livePackets(interface, false, expression)
-      .flatMap((linkType, packets) => packets.map(_.map(b => DecodedPacket.decode(b, linkType).require)))
-      .evalMap(t => IO.println(t.value.render(t.time)) *> IO.println(""))
-      .compile.drain.as(ExitCode.Success)
+      .use { (linkType, packets) =>
+        packets.map(_.map(b => DecodedPacket.decode(b, linkType).require))
+          .foreach(t => IO.println(t.value.render(t.time)) *> IO.println(""))
+          .compile.drain.as(ExitCode.Success)
+      }
 
